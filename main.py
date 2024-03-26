@@ -131,51 +131,80 @@ def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf
     model.activate_KL = True
     vae_params = list(model.encoder_loc.parameters()) + list(model.decoder_loc.parameters())
     vae_optimizer = optim.Adam(vae_params, lr=learning_rate_vae)
-    print("Starting Regularization focused training")
+
+    print("Starting Regularization focused Training")
     for epoch in range(num_epochs_vae):
         model.train()
+        epoch_loss = 0.0
+        epoch_kl_loss = 0.0
+        epoch_log_likelihood = 0.0
         for batch_idx, (data,) in enumerate(train_loader):
             data = data.to(device)
             vae_optimizer.zero_grad()
             loss, loss_kl, loss_log = model.loss_function_elbo(data, train_rbf=False, n_samples=n_samples)
             loss.backward()
             vae_optimizer.step()
-        print(f'Regularization Training - Epoch [{epoch+1}/{num_epochs_vae}], VAE Loss: {loss.item():.4f}, KL Loss: {loss_kl.item():.4f}, Log Likelihood: {loss_log.item():.4f}')
+            epoch_loss += loss.item()
+            epoch_kl_loss += loss_kl.item()
+            epoch_log_likelihood += loss_log.item()
+        epoch_loss /= len(train_loader)
+        epoch_kl_loss /= len(train_loader)
+        epoch_log_likelihood /= len(train_loader)
+        print(f'Regularization Training - Epoch [{epoch+1}/{num_epochs_vae}], VAE Loss: {epoch_loss:.4f}, KL Loss: {epoch_kl_loss:.4f}, Log Likelihood: {epoch_log_likelihood:.4f}')
 
     # Reconstruction-focused training of the VAE
     model.activate_KL = False
     model.kl_coeff = 0.1
     vae_params = list(model.decoder_loc.parameters())
     vae_optimizer = optim.Adam(vae_params, lr=learning_rate_vae)
-    print("Starting Reconstruction focused training")
+
+    print("Starting Reconstruction focused Training")
     for epoch in range(num_epochs_vae):
         if epoch == num_epochs_vae // 2:
             model.empowered_quaternions = True
         model.train()
+        epoch_loss = 0.0
+        epoch_kl_loss = 0.0
+        epoch_log_likelihood = 0.0
         for batch_idx, (data,) in enumerate(train_loader):
             data = data.to(device)
             vae_optimizer.zero_grad()
             loss, loss_kl, loss_log = model.loss_function_elbo(data, train_rbf=False, n_samples=n_samples)
             loss.backward()
             vae_optimizer.step()
-        print(f'Reconstruction Training - Epoch [{epoch+1}/{num_epochs_vae}], VAE Loss: {loss.item():.4f}, KL Loss: {loss_kl.item():.4f}, Log Likelihood: {loss_log.item():.4f}')
+            epoch_loss += loss.item()
+            epoch_kl_loss += loss_kl.item()
+            epoch_log_likelihood += loss_log.item()
+        epoch_loss /= len(train_loader)
+        epoch_kl_loss /= len(train_loader)
+        epoch_log_likelihood /= len(train_loader)
+        print(f'Reconstruction Training - Epoch [{epoch+1}/{num_epochs_vae}], VAE Loss: {epoch_loss:.4f}, KL Loss: {epoch_kl_loss:.4f}, Log Likelihood: {epoch_log_likelihood:.4f}')
     model.empowered_quaternions = False
 
     # Training of the RBF/Variance networks
     model.init_std(train_data.float(), load_clusters=False)
     rbf_params = list(model.dec_std_pos.parameters())
     rbf_optimizer = optim.Adam(rbf_params, lr=learning_rate_rbf)
-    print("Starting RBF Training")
 
+    print("Starting RBF Network Training")
     for epoch in range(num_epochs_rbf):
         model.train_var = True
+        epoch_loss = 0.0
+        epoch_kl_loss = 0.0
+        epoch_log_likelihood = 0.0
         for batch_idx, (data,) in enumerate(train_loader):
             data = data.to(device)
             rbf_optimizer.zero_grad()
             loss, loss_kl, loss_log = model.loss_function_elbo(data, train_rbf=True, n_samples=n_samples)
             loss.backward()
             rbf_optimizer.step()
-        print(f'RBF Training - Epoch [{epoch+1}/{num_epochs_rbf}], VAE Loss: {loss.item():.4f}, KL Loss: {loss_kl.item():.4f}, Log Likelihood: {loss_log.item():.4f}')
+            epoch_loss += loss.item()
+            epoch_kl_loss += loss_kl.item()
+            epoch_log_likelihood += loss_log.item()
+        epoch_loss /= len(train_loader)
+        epoch_kl_loss /= len(train_loader)
+        epoch_log_likelihood /= len(train_loader)
+        print(f'RBF Training - Epoch [{epoch+1}/{num_epochs_rbf}], VAE Loss: {epoch_loss:.4f}, KL Loss: {epoch_kl_loss:.4f}, Log Likelihood: {epoch_log_likelihood:.4f}')
 
     # Compute and store the latent representation of the training data
     model.eval()
@@ -189,7 +218,6 @@ def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf
         np.save('latent_representation.npy', latent_representation)
 
     return model
-
 # Usage
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dof = 1000
