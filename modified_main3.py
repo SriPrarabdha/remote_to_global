@@ -44,7 +44,7 @@ class VAE(nn.Module, EmbeddedManifold):
         
         self.encoder_scale_fixed = nn.Parameter(torch.tensor([sigma_z]), requires_grad=False)
         self.decoder_scale_pos = nn.Parameter(torch.tensor(sigma), requires_grad=False)
-        self.decoder_scale_vmf = nn.Parameter(torch.tensor(np.ones((batch_size, self.p)) * self.vmf_concentration_scale), requires_grad=False)
+        self.decoder_scale_vmf = nn.Parameter(torch.tensor(self.vmf_concentration_scale), requires_grad=False)
         
         self.prior_loc = nn.Parameter(torch.zeros(self.d), requires_grad=False)
         self.prior_scale = nn.Parameter(torch.ones(self.d), requires_grad=False)
@@ -57,7 +57,7 @@ class VAE(nn.Module, EmbeddedManifold):
             points = points.unsqueeze(0)
         mu_pos, mu_vmf = self.decode(points, train_rbf=True, jacobian=False)
         std = self.dec_std_pos(points, jacobian=False)
-        embedded = torch.cat((mu_pos.mean, mu_vmf.loc.unsqueeze(0), std_scale * std, std_scale * (1 / self.decoder_scale_vmf)), dim=2)
+        embedded = torch.cat((mu_pos.mean, mu_vmf.loc, std_scale * std, std_scale * (1 / self.decoder_scale_vmf)), dim=2)
         if not is_batched:
             embedded = embedded.squeeze(0)
         return embedded
@@ -126,7 +126,10 @@ class VAE(nn.Module, EmbeddedManifold):
         z = q.rsample(torch.Size([n_samples]))
         px_z, px_vmf_z = self.decode(z, train_rbf=train_rbf)
         
-        log_p = torch.mean(px_z.log_prob(x[:, :self.p // 2]), dim=1) + torch.mean(px_vmf_z.log_prob(x[:, self.p // 2:]), dim=0)
+        log_p_pos = torch.mean(px_z.log_prob(x[:, :self.p // 2]), dim=1)
+        log_p_vmf = px_vmf_z.log_prob(x[:, self.p // 2:].unsqueeze(0)).mean(dim=1)
+        log_p = log_p_pos + log_p_vmf
+        
         kl = -0.5 * torch.sum(1 + q.variance.log() - q.mean.pow(2) - q.variance) * self.kl_coeff
         elbo = torch.mean(log_p - kl, dim=0)
         log_mean = torch.mean(log_p, dim=0)
@@ -145,7 +148,7 @@ class VAE(nn.Module, EmbeddedManifold):
             module.training = False
         for module in self.decoder_loc._modules.values():
             module.training = False
-
+            
 def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf, device, n_samples, learning_rate_vae, learning_rate_rbf):
     # Regularization-focused training of the VAE
     model.activate_KL = True
