@@ -8,6 +8,7 @@ import numpy as np
 import pickle
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
+import hyperspherical_vae.distributions.von_mises_fisher as vmf
 
 class VAE(nn.Module, EmbeddedManifold):
     def __init__(self, layers, batch_size, device, sigma=1e-6, sigma_z=0.1):
@@ -19,8 +20,7 @@ class VAE(nn.Module, EmbeddedManifold):
         self.dec_std_pos = None
         self.device = device
         self.kl_coeff = 1.0
-        self.vmf_concentration_scale = 1e2  # the scale of vmf distribution concentration
-        
+        self.vmf_concentration_scale = 1e2  # the scale of vmf distribution concentration        
         # Encoder
         enc = []
         for k in range(len(layers) - 1):
@@ -76,11 +76,11 @@ class VAE(nn.Module, EmbeddedManifold):
         position_loc = x_loc[:, :self.p // 2]
         vmf_loc = x_loc[:, self.p // 2:]
         vmf_mean = vmf_loc / vmf_loc.norm(dim=-1, keepdim=True)
-        
+        print(vmf_loc.shape, vmf_mean.shape)
         x_shape = list(z.shape)
         x_shape[-1] = position_loc.shape[-1]
         
-        vmf_distribution = vmf.VonMisesFisher(vmf_mean, vmf_scale)
+        vmf_distribution = vmf.VonMisesFisher(vmf_mean.unsqueeze(1), vmf_scale)
         position_distribution = td.Independent(td.Normal(loc=position_loc.view(torch.Size(x_shape)), scale=position_scale), 1)
         
         return position_distribution, vmf_distribution
@@ -127,7 +127,7 @@ class VAE(nn.Module, EmbeddedManifold):
         px_z, px_vmf_z = self.decode(z, train_rbf=train_rbf)
         
         log_p_pos = torch.mean(px_z.log_prob(x[:, :self.p // 2]), dim=1)
-        log_p_vmf = px_vmf_z.log_prob(x[:, self.p // 2:].unsqueeze(0)).mean(dim=1)
+        log_p_vmf = px_vmf_z.log_prob(x[:, self.p // 2:]).mean()
         log_p = log_p_pos + log_p_vmf
         
         kl = -0.5 * torch.sum(1 + q.variance.log() - q.mean.pow(2) - q.variance) * self.kl_coeff
