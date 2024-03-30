@@ -80,7 +80,7 @@ class VAE(nn.Module, EmbeddedManifold):
         x_shape = list(z.shape)
         x_shape[-1] = position_loc.shape[-1]
         
-        vmf_distribution = vmf.VonMisesFisher(vmf_mean.unsqueeze(1), vmf_scale)
+        vmf_distribution = vmf.VonMisesFisher(vmf_mean.unsqueeze(1), vmf_scale.unsqueeze(0))
         position_distribution = td.Independent(td.Normal(loc=position_loc.view(torch.Size(x_shape)), scale=position_scale), 1)
         
         return position_distribution, vmf_distribution
@@ -135,6 +135,7 @@ class VAE(nn.Module, EmbeddedManifold):
         log_mean = torch.mean(log_p, dim=0)
         
         z_detached = z.detach().cpu().numpy()
+        z_detached = z_detached.reshape(-1, z_detached.shape[-1])
         kmeans = KMeans(n_clusters=10, n_init=10)  # Assuming 10 classes
         cluster_labels = kmeans.fit_predict(z_detached)
         cluster_centers = torch.tensor(kmeans.cluster_centers_, dtype=torch.float32).to(self.device)
@@ -249,10 +250,10 @@ def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dof = 11
 encoder_scales = [1.0]
-n_samples = 640
+n_samples = 100
 num_epochs_rbf = 300
 num_epochs_vae = 300
-batch_size = 640
+batch_size = 100
 
 learning_rate_vae = 2e-3
 learning_rate_rbf = 1e-3
