@@ -20,7 +20,7 @@ class VAE(nn.Module, EmbeddedManifold):
         self.dec_std_pos = None
         self.device = device
         self.kl_coeff = 1.0
-        self.vmf_concentration_scale = 1e2  # the scale of vmf distribution concentration        
+        self.vmf_concentration_scale = 10  # the scale of vmf distribution concentration        
         # Encoder
         enc = []
         for k in range(len(layers) - 1):
@@ -76,7 +76,7 @@ class VAE(nn.Module, EmbeddedManifold):
         position_loc = x_loc[:, :self.p // 2]
         vmf_loc = x_loc[:, self.p // 2:]
         vmf_mean = vmf_loc / vmf_loc.norm(dim=-1, keepdim=True)
-        print(vmf_loc.shape, vmf_mean.shape)
+        #print(vmf_loc.shape, vmf_mean.shape)
         x_shape = list(z.shape)
         x_shape[-1] = position_loc.shape[-1]
         
@@ -134,14 +134,14 @@ class VAE(nn.Module, EmbeddedManifold):
         elbo = torch.mean(log_p - kl, dim=0)
         log_mean = torch.mean(log_p, dim=0)
         
-        z_detached = z.detach().cpu().numpy()
-        z_detached = z_detached.reshape(-1, z_detached.shape[-1])
-        kmeans = KMeans(n_clusters=10, n_init=10)  # Assuming 10 classes
-        cluster_labels = kmeans.fit_predict(z_detached)
-        cluster_centers = torch.tensor(kmeans.cluster_centers_, dtype=torch.float32).to(self.device)
-        clustering_loss = torch.mean(torch.min(torch.cdist(z, cluster_centers), dim=1)[0])
+        #z_detached = z.detach().cpu().numpy()
+        #z_detached = z_detached.reshape(-1, z_detached.shape[-1])
+        #kmeans = KMeans(n_clusters=10, n_init=10)  # Assuming 10 classes
+        #cluster_labels = kmeans.fit_predict(z_detached)
+        #cluster_centers = torch.tensor(kmeans.cluster_centers_, dtype=torch.float32).to(self.device)
+        #clustering_loss = torch.mean(torch.min(torch.cdist(z, cluster_centers), dim=1)[0])
         
-        total_loss = -elbo + clustering_loss
+        #total_loss = -elbo + clustering_loss
         return -elbo, kl, log_mean
     
     def disable_training(self):
@@ -157,7 +157,7 @@ def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf
     vae_optimizer = optim.Adam(vae_params, lr=learning_rate_vae)
 
     print("Starting Regularization focused Training")
-    kl_coeff_max = 1.0
+    kl_coeff_max = 1
     kl_coeff_step = kl_coeff_max / num_epochs_vae
     for epoch in range(num_epochs_vae):
         model.train()
@@ -181,7 +181,7 @@ def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf
 
     # Reconstruction-focused training of the VAE
     model.activate_KL = False
-    model.kl_coeff = 0.01
+    model.kl_coeff = 1
     
     vae_params = list(model.decoder_loc.parameters())
     vae_optimizer = optim.Adam(vae_params, lr=learning_rate_vae)
@@ -243,17 +243,17 @@ def train_model(model, train_loader, test_loader, num_epochs_vae, num_epochs_rbf
             q, _ = model.encode(data, train_rbf=True)
             latent_representation.append(q.mean.detach().cpu().numpy())
         latent_representation = np.concatenate(latent_representation, axis=0)
-        np.save('MyeloidProgenitors_latent_representation.npy', latent_representation)
+        np.save('MyeloidProgenitors_latent_representation_2.npy', latent_representation)
 
     return model
 # Usage
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dof = 11
 encoder_scales = [1.0]
-n_samples = 100
-num_epochs_rbf = 300
-num_epochs_vae = 300
-batch_size = 100
+n_samples = 300
+num_epochs_rbf = 150
+num_epochs_vae = 100
+batch_size = 300
 
 learning_rate_vae = 2e-3
 learning_rate_rbf = 1e-3
